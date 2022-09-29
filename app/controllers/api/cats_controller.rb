@@ -1,45 +1,85 @@
-class Api::CatsController < ApplicationController
-  # make sure you are login before you use the controller 
-  before_action :authenticate_user!
-  before_action :set_cat, only: [:show, :update, :destroy]
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
-  # current_user - obj of current login user info
-  def index
-    render json: current_user.cats 
-  end
+export const NoteContext = React.createContext();
 
-  def show
-    render json: @cat 
-  end
+export const NoteConsumer = NoteContext.Consumer; 
 
-  def create
-    @cat = current_user.cats.new(cat_params)
-    if @cat.save 
-      render json: @cat  
-    else 
-      render json: { errors: @cat.errors }, status: :unprocessable_entity
-    end
-  end
+const NoteProvider = ({ children }) => {
+  const [notes, setNotes] = useState([])
+  const [errors, setErrors] = useState(null)
+  const navigate = useNavigate()
 
-  def update
-    if @cat.update(cat_params)
-      render json: @cat  
-    else 
-      render json: { errors: @cat.errors }, status: :unprocessable_entity
-    end
-  end
+  const getAllNotes = (catId) => {
+    axios.get(`/api/cats/${catId}/notes`)
+      .then( res => setNotes(res.data))
+      .catch(err => {
+        setErrors({ 
+          variant: 'danger',
+          msg: err.response.data.errors[0]
+        })
+      })
+  }
 
-  def destroy
-    @cat.destroy
-    render json: { message: 'Cat Released'}
-  end
+  const addNote = (catId, note) => {
+    axios.post(`/api/cats/${catId}/notes`, { note })
+      .then( res => setNotes([...notes, res.data]))
+      .catch(err => {
+        setErrors({ 
+          variant: 'danger',
+          msg: Object.keys(err.response.data.errors)[0] + " " + Object.values(err.response.data.errors)[0][0]
+        })
+      })
+  }
 
-  private 
-    def cat_params
-      params.require(:cat).permit(:name, :breed, :registry, :avatar)
-    end
+  const updateNote = (catId, id, note) => {
+    axios.put(`/api/cats/${catId}/notes/${id}`, { note })
+      .then( res => {
+        const newUpdatedNotes = notes.map(n => {
+          if (n.id !== id) {
+            return res.data
+          }
+          return n
+        })
+        setNotes(newUpdatedNotes)
+        navigate(`/${catId}/notes`)
+        window.location.reload()
+      })
+      .catch(err => {
+        setErrors({ 
+          variant: 'danger',
+          msg: Object.keys(err.response.data.errors)[0] + " " + Object.values(err.response.data.errors)[0][0]
+        })
+      })
+  }
 
-    def set_cat
-      @cat = current_user.cats.find(params[:id])
-    end
-end
+  const deleteNote = (catId, id) => {
+    axios.delete(`/api/cats/${catId}/notes/${id}`)
+      .then(res => {
+        setNotes(notes.filter(n => n.id !== id))
+      })
+      .catch(err => {
+        setErrors({ 
+          variant: 'danger',
+          msg: err.response.data.errors[0]
+        })
+      })
+  }
+  
+  return (
+    <NoteContext.Provider value={{
+      notes,
+      errors,
+      setErrors, 
+      getAllNotes,
+      addNote, 
+      updateNote,
+      deleteNote,
+    }}>
+      { children }
+    </NoteContext.Provider>
+  )
+}
+
+export default NoteProvider;
